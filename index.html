@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8" />
+        <title>WebAim</title>
+        <style>
+            body {
+                margin: 0;
+            }
+        </style>
+    </head>
+    <body>
+        <script src="js/three.js"></script>
+        <script src="js/PointerLockControls.js"></script>
+
+        <script>
+            // Our Javascript will go here.
+            const scene = new THREE.Scene();
+            const camera = new THREE.PerspectiveCamera(
+                90,
+                window.innerWidth / window.innerHeight,
+                0.1,
+                1000
+            );
+
+            const renderer = new THREE.WebGLRenderer();
+            renderer.shadowMapEnabled = true;
+            renderer.setClearColor('rgb(255,255,255)');
+
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+
+            camera.position.set(0, 10, 5);
+            scene.add(camera);
+
+            let CursorSize = 0.075;
+
+            var reticle = new THREE.Mesh(
+                new THREE.RingBufferGeometry(CursorSize * 0.75, CursorSize, 25),
+                new THREE.MeshBasicMaterial({
+                    color: 0x000000,
+                })
+            );
+            reticle.scale.x = 0.6;
+            reticle.position.z = -3;
+            reticle.lookAt(camera.position);
+
+            camera.add(reticle);
+
+            scene.background = new THREE.Color(0xffffff);
+            scene.fog = new THREE.Fog(0xffffff, 0, 750);
+
+            const light = new THREE.HemisphereLight(0xeeeeff, 0x777788, 0.75);
+            light.position.set(0.5, 1, 0.75);
+            scene.add(light);
+
+            // floor
+
+            let floorGeometry = new THREE.PlaneGeometry(2000, 2000, 100, 100);
+            floorGeometry.rotateX(-Math.PI / 2);
+            const floorMaterial = new THREE.MeshLambertMaterial({
+                color: 0xd0d0d0,
+                side: THREE.DoubleSide,
+            });
+            const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+            scene.add(floor);
+
+            const geometry = new THREE.SphereGeometry(1, 36, 36);
+            const material = new THREE.MeshLambertMaterial({ color: 0x4dc3f1 });
+            const sphere = new THREE.Mesh(geometry, material);
+
+            scene.add(sphere);
+            sphere.position.set(0, 10, -10);
+
+            window.addEventListener('resize', onWindowResize);
+
+            const controls = new THREE.PointerLockControls(
+                camera,
+                document.body
+            );
+
+            controls.setSensitivity(0.5);
+
+            document.addEventListener('click', function () {
+                controls.lock();
+            });
+
+            function onWindowResize() {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            }
+
+            document.addEventListener('click', function () {
+                if (selectedObject != null && selectedObject != floor) {
+                    scene.remove(selectedObject);
+                    spawnSphere();
+                }
+            });
+
+            let raycaster = new THREE.Raycaster();
+            let selectedObject = null;
+
+            function animate() {
+                requestAnimationFrame(animate);
+
+                raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+
+                var intersects = raycaster.intersectObject(scene, true);
+
+                if (intersects.length > 0) {
+                    selectedObject = intersects[0].object;
+                } else {
+                    selectedObject = null;
+                }
+
+                renderer.render(scene, camera);
+            }
+            function spawnSphere() {
+                let geometry = new THREE.SphereGeometry(1, 36, 36);
+                let material = new THREE.MeshLambertMaterial({
+                    color: 0x4dc3f1,
+                });
+                let sphere = new THREE.Mesh(geometry, material);
+
+                scene.add(sphere);
+                sphere.position.set(
+                    getRandomInt(-10, 10),
+                    getRandomInt(5, 10),
+                    getRandomInt(-2, -10)
+                );
+            }
+            function getRandomInt(min, max) {
+                min = Math.ceil(min);
+                max = Math.floor(max);
+                return Math.floor(Math.random() * (max - min) + min); //The maximum is exclusive and the minimum is inclusive
+            }
+            animate();
+        </script>
+    </body>
+</html>
