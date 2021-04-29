@@ -3,6 +3,18 @@
     <head>
         <meta charset="utf-8" />
         <title>WebAim</title>
+        <script
+            src="https://code.jquery.com/jquery-3.6.0.min.js"
+            integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4="
+            crossorigin="anonymous"
+        ></script>
+        <link
+            rel="stylesheet"
+            href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css"
+            integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T"
+            crossorigin="anonymous"
+        />
+        <link rel="stylesheet" href="css/style.css" />
         <style>
             body {
                 margin: 0;
@@ -14,7 +26,18 @@
         <script src="js/PointerLockControls.js"></script>
 
         <script>
+            let start = false;
+            let paused = true;
+            let raycaster = new THREE.Raycaster();
+            let selectedObject = null;
             const scene = new THREE.Scene();
+            let CursorSize = 0.1;
+
+            let gameTimeLimit = 60;
+            let score = 0;
+            let clicks = 0;
+            let hits = 0;
+            let time = gameTimeLimit; // time in seconds
 
             const camera = new THREE.PerspectiveCamera(
                 90,
@@ -39,14 +62,13 @@
             light.position.set(0.5, 1, 0.75);
             scene.add(light);
 
-            let CursorSize = 0.1;
             var reticle = new THREE.Mesh(
                 new THREE.RingBufferGeometry(CursorSize * 0.5, CursorSize, 25),
                 new THREE.MeshBasicMaterial({
                     color: 0x000000,
                 })
             );
-             reticle.scale.x = 0.4;
+            reticle.scale.x = 0.4;
             reticle.position.z = -3;
             reticle.lookAt(camera.position);
 
@@ -67,19 +89,61 @@
             const floor = new THREE.Mesh(floorGeometry, floorMaterial);
             scene.add(floor);
 
-            const geometry = new THREE.SphereGeometry(1, 36, 36);
-            const material = new THREE.MeshLambertMaterial({ color: 0x4dc3f1 });
-            const sphere = new THREE.Mesh(geometry, material);
-            scene.add(sphere);
-            sphere.position.set(0, 10, -10);
-
             window.addEventListener('resize', onWindowResize);
+            $('canvas').addClass('blur');
 
-            document.addEventListener('click', function () {
-                controls.lock();
+            $(document).click(function (e) {
+                let target = e.target;
+
+                if (target.id == 'resume') {
+                    controls.lock();
+                }
+
+                if (target.id == 'sensitivityInput') {
+                    controls.setSensitivity($('#sensitivityInput').val());
+                }
+
+                if (target.id == 'play-again') {
+                    time = gameTimeLimit;
+                    score = 0;
+                    clicks = 0;
+                    hits = 0;
+                    paused = false;
+                    animate();
+                    controls.lock();
+                    $('#gameover-menu').addClass('hidden');
+                }
+
+                if (!paused) {
+                    controls.lock();
+                }
+
+                if (target == document.body) {
+                    clicks++;
+                }
+
                 if (selectedObject != null && selectedObject != floor) {
                     scene.remove(selectedObject);
                     spawnSphere();
+                    hits++;
+                    if (!paused) {
+                        score += 100;
+                    }
+                } else {
+                    if (!paused) {
+                        score -= 50;
+                    }
+                }
+
+                score = Math.max(score, 0);
+                $('#score').html(score);
+            });
+
+            $(document).mousemove(function (e) {
+                let target = e.target;
+
+                if (target.id == 'sensitivityInput') {
+                    controls.setSensitivity($('#sensitivityInput').val());
                 }
             });
 
@@ -95,26 +159,71 @@
                 document.body
             );
 
-            controls.setSensitivity(0.5);
-
-            let raycaster = new THREE.Raycaster();
-            let selectedObject = null;
-
-            function animate() {
-                requestAnimationFrame(animate);
-
-                raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
-
-                var intersects = raycaster.intersectObject(scene, true);
-
-                if (intersects.length > 0) {
-                    selectedObject = intersects[0].object;
-                } else {
-                    selectedObject = null;
+            controls.addEventListener('unlock', function () {
+                if (time > 0) {
+                    $('#pause-menu').removeClass('hidden');
+                }
+                $('canvas').addClass('blur');
+                paused = true;
+            });
+            controls.addEventListener('lock', function () {
+                $('#pause-menu').addClass('hidden');
+                $('canvas').removeClass('blur');
+                if (!start) {
+                    start = true;
                 }
 
-                renderer.render(scene, camera);
+                paused = false;
+            });
+
+            controls.setSensitivity(0.5);
+
+            spawnSphere();
+            spawnSphere();
+            spawnSphere();
+
+            var clock = new THREE.Clock();
+            var speed = 2; //units a second
+            var delta = 0;
+
+            function animate() {
+                if (time >= 0) {
+                    requestAnimationFrame(animate);
+
+                    raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+
+                    var intersects = raycaster.intersectObject(scene, true);
+
+                    if (intersects.length > 0) {
+                        selectedObject = intersects[0].object;
+                    } else {
+                        selectedObject = null;
+                    }
+
+                    delta = clock.getDelta();
+
+                    if (start && !paused) {
+                        time -= delta;
+                    }
+
+                    $('#timer').html(NumToTime(time));
+
+                    renderer.render(scene, camera);
+                }
+                if (time <= 0) {
+                    $('#gameover-menu').removeClass('hidden');
+                    controls.unlock();
+
+                    $('#timer').html(NumToTime(0));
+                    $('#menu-score').html('Score: ' + score);
+                    $('#menu-accuracy').html(
+                        'Accuracy: ' +
+                            parseFloat((hits / clicks) * 100).toFixed(2) +
+                            '%'
+                    );
+                }
             }
+
             function spawnSphere() {
                 let geometry = new THREE.SphereGeometry(1, 36, 36);
                 let material = new THREE.MeshLambertMaterial({
@@ -124,9 +233,9 @@
 
                 scene.add(sphere);
                 sphere.position.set(
-                    getRandomInt(-10, 10),
-                    getRandomInt(20, 40),
-                    getRandomInt(-10, -20)
+                    getRandomInt(-5, 5),
+                    getRandomInt(20, 30),
+                    getRandomInt(-5, -15)
                 );
             }
             function getRandomInt(min, max) {
@@ -134,7 +243,56 @@
                 max = Math.floor(max);
                 return Math.floor(Math.random() * (max - min) + min); //The maximum is exclusive and the minimum is inclusive
             }
+            function NumToTime(num) {
+                var minutes = Math.floor(num / 60);
+                var seconds = Math.floor(num % 60);
+                if ((seconds + '').length < 2) {
+                    seconds = '0' + seconds;
+                }
+                return minutes + ':' + seconds;
+            }
             animate();
         </script>
+
+        <div id="overlay-container">
+            <div id="game-info" class="px-5 mx-5 mt-3">
+                <span></span>
+                <h1 id="timer" class="d-inline m-auto text-center">0:00</h1>
+                <h3 id="score" class="d-inline text-right">0</h3>
+            </div>
+            <div id="pause-menu" class="">
+                <label
+                    >Sensitivity:
+                    <input
+                        type="range"
+                        id="sensitivityInput"
+                        min="0.1"
+                        max="3"
+                        step="0.01"
+                /></label>
+                <button id="resume" class="d-inline btn btn-primary">
+                    Resume
+                </button>
+            </div>
+
+            <div id="gameover-menu" class="hidden">
+                <h3 id="menu-score">Score:</h3>
+                <h3 id="menu-accuracy">Accuracy:</h3>
+
+                <button id="play-again" class="d-inline btn btn-primary">
+                    Play Again
+                </button>
+            </div>
+        </div>
+        <script
+            src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js"
+            integrity="sha384-UO2eT0CpHqdSJQ6hJty5KVphtPhzWj9WO1clHTMGa3JDZwrnQq4sF86dIHNDz0W1"
+            crossorigin="anonymous"
+        ></script>
+        <script
+            src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"
+            integrity="sha384-JjSmVgyd0p3pXB1rRibZUAYoIIy6OrQ6VrjIEaFf/nJGzIxFDsf4x0xIM+B07jRM"
+            crossorigin="anonymous"
+        ></script>
     </body>
 </html>
