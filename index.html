@@ -29,7 +29,7 @@
 
                 let targets = [];
 
-                let gameTimeLimit = 10;
+                let gameTimeLimit = 60;
                 let accuracy = 0;
                 let score = 0;
                 let clicks = 0;
@@ -205,9 +205,9 @@
 
                         $('#gameover-menu').addClass('hidden');
 
-                        spawnSphere();
-                        spawnSphere();
-                        spawnSphere();
+                        camera.lookAt(new THREE.Vector3(0, 20, -10));
+
+                        setGameMode();
                     } else if (target.id == 'start-button') {
                         audioContext = new (window.AudioContext || window.webkitAudioContext)();
                         audio = document.getElementsByTagName('audio')[0];
@@ -306,16 +306,17 @@
 
                             updateUI();
                         }
-                    }
-                    if (timer <= 0) {
-                        gameover = true;
-                        clearTargets();
-                        $('#gameover-menu').removeClass('hidden');
-                        controls.unlock();
+                    } else if (timer <= 0) {
+                        if (!gameover) {
+                            gameover = true;
+                            clearTargets();
+                            $('#gameover-menu').removeClass('hidden');
+                            controls.unlock();
 
-                        $('#timer').html(NumToTime(0));
-                        $('#menu-score').html('Score: ' + score);
-                        $('#menu-accuracy').html('Accuracy: ' + accuracy + '%');
+                            $('#timer').html(NumToTime(0));
+                            $('#menu-score').html('Score: ' + score);
+                            $('#menu-accuracy').html('Accuracy: ' + accuracy + '%');
+                        }
                     }
                     renderer.render(scene, camera);
                 }
@@ -351,50 +352,52 @@
                     switch (gamemode) {
                         case 'target-track':
                             let target = targets[0];
-                            let radius = target.userData.radius;
-                            let targetPos = target.userData.targetPos;
-                            let speed = target.userData.speed;
-                            let maxDistanceFromPlayer = 25;
+                            if (target != undefined) {
+                                let radius = target.userData.radius;
+                                let targetPos = target.userData.targetPos;
+                                let speed = target.userData.speed;
+                                let maxDistanceFromPlayer = 25;
 
-                            if (targetPos == null) {
-                                let changeX = target.position.x + getRandomNum(-20, 20);
-                                let changeY = target.position.y + getRandomNum(-20, 20);
-                                let changeZ = target.position.z + getRandomNum(-20, 20);
+                                if (targetPos == null) {
+                                    let changeX = target.position.x + getRandomNum(-20, 20);
+                                    let changeY = target.position.y + getRandomNum(-20, 20);
+                                    let changeZ = target.position.z + getRandomNum(-20, 20);
 
-                                changeX = Math.min(changeX, maxDistanceFromPlayer - radius);
-                                changeX = Math.max(changeX, -maxDistanceFromPlayer + radius);
-                                changeY = Math.min(changeY, maxDistanceFromPlayer - radius);
-                                changeY = Math.max(changeY, 0 + radius);
-                                changeZ = Math.min(changeZ, maxDistanceFromPlayer - radius);
-                                changeZ = Math.max(changeZ, -maxDistanceFromPlayer + radius);
+                                    changeX = Math.min(changeX, maxDistanceFromPlayer - radius);
+                                    changeX = Math.max(changeX, -maxDistanceFromPlayer + radius);
+                                    changeY = Math.min(changeY, maxDistanceFromPlayer - radius);
+                                    changeY = Math.max(changeY, 0 + radius);
+                                    changeZ = Math.min(changeZ, maxDistanceFromPlayer - radius);
+                                    changeZ = Math.max(changeZ, -maxDistanceFromPlayer + radius);
 
-                                targetPos = new THREE.Vector3(changeX, changeY, changeZ);
-                                target.userData.targetPos = targetPos;
-                            }
-
-                            let distance = target.position.distanceTo(targetPos);
-                            if (distance <= 1) {
-                                target.userData.targetPos = null;
-                            } else {
-                                if (Math.abs(target.position.x - targetPos.x) > 0.1) {
-                                    if (target.position.x > targetPos.x) {
-                                        target.position.x -= speed;
-                                    } else if (target.position.x < targetPos.x) {
-                                        target.position.x += speed;
-                                    }
+                                    targetPos = new THREE.Vector3(changeX, changeY, changeZ);
+                                    target.userData.targetPos = targetPos;
                                 }
-                                if (Math.abs(target.position.y - targetPos.y) > 0.1) {
-                                    if (target.position.y > targetPos.y) {
-                                        target.position.y -= speed;
-                                    } else if (target.position.y < targetPos.y) {
-                                        target.position.y += speed;
+
+                                let distance = target.position.distanceTo(targetPos);
+                                if (distance <= 1) {
+                                    target.userData.targetPos = null;
+                                } else {
+                                    if (Math.abs(target.position.x - targetPos.x) > 0.1) {
+                                        if (target.position.x > targetPos.x) {
+                                            target.position.x -= speed;
+                                        } else if (target.position.x < targetPos.x) {
+                                            target.position.x += speed;
+                                        }
                                     }
-                                }
-                                if (Math.abs(target.position.z - targetPos.z) > 0.1) {
-                                    if (target.position.z > targetPos.z) {
-                                        target.position.z -= speed;
-                                    } else if (target.position.z < targetPos.z) {
-                                        target.position.z += speed;
+                                    if (Math.abs(target.position.y - targetPos.y) > 0.1) {
+                                        if (target.position.y > targetPos.y) {
+                                            target.position.y -= speed;
+                                        } else if (target.position.y < targetPos.y) {
+                                            target.position.y += speed;
+                                        }
+                                    }
+                                    if (Math.abs(target.position.z - targetPos.z) > 0.1) {
+                                        if (target.position.z > targetPos.z) {
+                                            target.position.z -= speed;
+                                        } else if (target.position.z < targetPos.z) {
+                                            target.position.z += speed;
+                                        }
                                     }
                                 }
                             }
@@ -470,6 +473,7 @@
                     for (let i = 0; i < targets.length; i++) {
                         scene.remove(targets[i]);
                     }
+                    targets = [];
                 }
 
                 function spawnSphere(position) {
@@ -483,10 +487,14 @@
                     let sphere = new THREE.Mesh(geometry, material);
                     sphere.name = 'target';
 
-                    sphere.userData.defaultMat = 0x0069d9;
-                    sphere.userData.radius = 1;
-                    sphere.userData.targetPos = null;
-                    sphere.userData.speed = 0.1;
+                    switch (gamemode) {
+                        case 'target-track':
+                            sphere.userData.defaultMat = 0x0069d9;
+                            sphere.userData.radius = 1;
+                            sphere.userData.targetPos = null;
+                            sphere.userData.speed = 0.1;
+                            break;
+                    }
 
                     sphere.castShadow = true;
                     sphere.receiveShadow = false;
