@@ -26,241 +26,388 @@
         <script src="js/PointerLockControls.js"></script>
 
         <script>
-            let start = false;
-            let paused = true;
-            let raycaster = new THREE.Raycaster();
-            let selectedObject = null;
-            const scene = new THREE.Scene();
-            let CursorSize = 0.1;
+            $(document).ready(function () {
+                let start = false;
+                let paused = true;
+                let raycaster = new THREE.Raycaster();
+                let selectedObject = null;
+                const scene = new THREE.Scene();
+                let CursorSize = 0.1;
+                let locked = false;
+                let gameover = false;
 
-            let gameTimeLimit = 60;
-            let score = 0;
-            let clicks = 0;
-            let hits = 0;
-            let time = gameTimeLimit; // time in seconds
+                let targets = [];
 
-            const camera = new THREE.PerspectiveCamera(
-                90,
-                window.innerWidth / window.innerHeight,
-                0.1,
-                1000
-            );
-            camera.position.set(0, 20, 5);
+                let gameTimeLimit = 60;
+                let score = 0;
+                let clicks = 0;
+                let hits = 0;
+                let time = gameTimeLimit; // time in seconds
 
-            const renderer = new THREE.WebGLRenderer();
-            renderer.shadowMapEnabled = true;
-            renderer.setClearColor('rgb(255,255,255)');
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            document.body.appendChild(renderer.domElement);
+                //Audio elements
+                let audioContext = null;
+                let audio = null;
+                let source = null;
+                var filter = null;
 
-            scene.add(camera);
+                const camera = new THREE.PerspectiveCamera(
+                    90,
+                    window.innerWidth / window.innerHeight,
+                    0.1,
+                    1000
+                );
+                camera.position.set(0, 20, 5);
 
-            scene.background = new THREE.Color(0xffffff);
-            scene.fog = new THREE.Fog(0xffffff, 0, 750);
+                const renderer = new THREE.WebGLRenderer();
+                renderer.shadowMap.soft = true;
+                renderer.shadowMap.enabled = true;
+                renderer.shadowMap.type = THREE.PCFSoftShadowMap; // default THREE.PCFShadowMap
 
-            const light = new THREE.HemisphereLight(0xeeeeff, 0x777788, 0.75);
-            light.position.set(0.5, 1, 0.75);
-            scene.add(light);
+                renderer.toneMapping = THREE.ReinhardToneMapping;
+                renderer.toneMappingExposure = 2.3;
 
-            var reticle = new THREE.Mesh(
-                new THREE.RingBufferGeometry(CursorSize * 0.5, CursorSize, 25),
-                new THREE.MeshBasicMaterial({
-                    color: 0x000000,
-                })
-            );
-            reticle.scale.x = 0.4;
-            reticle.position.z = -3;
-            reticle.lookAt(camera.position);
-
-            camera.add(reticle);
-
-            // floor
-            const floorTex = new THREE.TextureLoader().load('floor-tex.jpg');
-            floorTex.wrapS = THREE.RepeatWrapping;
-            floorTex.wrapT = THREE.RepeatWrapping;
-            floorTex.repeat.set(20, 20);
-
-            let floorGeometry = new THREE.PlaneGeometry(2000, 2000, 100, 100);
-            floorGeometry.rotateX(-Math.PI / 2);
-            const floorMaterial = new THREE.MeshLambertMaterial({
-                map: floorTex,
-                side: THREE.DoubleSide,
-            });
-            const floor = new THREE.Mesh(floorGeometry, floorMaterial);
-            scene.add(floor);
-
-            window.addEventListener('resize', onWindowResize);
-            $('canvas').addClass('blur');
-
-            $(document).click(function (e) {
-                let target = e.target;
-
-                if (target.id == 'resume') {
-                    controls.lock();
-                }
-
-                if (target.id == 'sensitivityInput') {
-                    controls.setSensitivity($('#sensitivityInput').val());
-                }
-
-                if (target.id == 'play-again') {
-                    time = gameTimeLimit;
-                    score = 0;
-                    clicks = 0;
-                    hits = 0;
-                    paused = false;
-                    animate();
-                    controls.lock();
-                    $('#gameover-menu').addClass('hidden');
-                }
-
-                if (!paused) {
-                    controls.lock();
-                }
-
-                if (target == document.body) {
-                    clicks++;
-                }
-
-                if (selectedObject != null && selectedObject != floor) {
-                    scene.remove(selectedObject);
-                    spawnSphere();
-                    hits++;
-                    if (!paused) {
-                        score += 100;
-                    }
-                } else {
-                    if (!paused) {
-                        score -= 50;
-                    }
-                }
-
-                score = Math.max(score, 0);
-                $('#score').html(score);
-            });
-
-            $(document).mousemove(function (e) {
-                let target = e.target;
-
-                if (target.id == 'sensitivityInput') {
-                    controls.setSensitivity($('#sensitivityInput').val());
-                }
-            });
-
-            function onWindowResize() {
-                camera.aspect = window.innerWidth / window.innerHeight;
-                camera.updateProjectionMatrix();
-
+                renderer.setClearColor('rgb(255,255,255)');
                 renderer.setSize(window.innerWidth, window.innerHeight);
-            }
+                document.body.appendChild(renderer.domElement);
 
-            const controls = new THREE.PointerLockControls(
-                camera,
-                document.body
-            );
+                scene.add(camera);
 
-            controls.addEventListener('unlock', function () {
-                if (time > 0) {
-                    $('#pause-menu').removeClass('hidden');
-                }
+                scene.background = new THREE.Color(0xffffff);
+
+                const hemiLight = new THREE.AmbientLight(0xffffff, 1);
+                hemiLight.position.set(0.5, 1, 0.25);
+                scene.add(hemiLight);
+
+                const light = new THREE.PointLight(0xffffff, 2, 500);
+                light.position.set(30, 50, 30);
+                light.castShadow = true; // default false
+                light.shadow.radius = 15;
+                scene.add(light);
+
+                //Set up shadow properties for the light
+                light.shadow.mapSize.width = 1024 * 4; // default
+                light.shadow.mapSize.height = 1024 * 4; // default
+                light.shadow.camera.near = 0.5; // default
+                light.shadow.camera.far = 100; // default
+
+                let light2 = light.clone();
+                light2.position.set(-30, 30, 20);
+                //scene.add(light2);
+
+                var reticle = new THREE.Mesh(
+                    new THREE.RingBufferGeometry(
+                        CursorSize * 0.5,
+                        CursorSize,
+                        25
+                    ),
+                    new THREE.MeshBasicMaterial({
+                        color: 0x000000,
+                    })
+                );
+                reticle.scale.x = 0.4;
+                reticle.position.z = -3;
+                reticle.lookAt(camera.position);
+
+                camera.add(reticle);
+
+                // floor
+                const floorTex = new THREE.TextureLoader().load(
+                    'floor-tex.jpg'
+                );
+                floorTex.wrapS = THREE.RepeatWrapping;
+                floorTex.wrapT = THREE.RepeatWrapping;
+                floorTex.repeat.set(20, 20);
+
+                let floorGeometry = new THREE.PlaneGeometry(
+                    2000,
+                    2000,
+                    100,
+                    100
+                );
+                floorGeometry.rotateX(-Math.PI / 2);
+                const floorMaterial = new THREE.MeshPhysicalMaterial({
+                    map: floorTex,
+                    side: THREE.DoubleSide,
+                });
+                const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+                floor.receiveShadow = true;
+                scene.add(floor);
+
+                // wall texture
+                const wallTex = new THREE.TextureLoader().load('wall-tex.jpg');
+                wallTex.wrapS = THREE.RepeatWrapping;
+                wallTex.wrapT = THREE.RepeatWrapping;
+                wallTex.repeat.set(10, 10);
+
+                const wallMaterial = new THREE.MeshPhysicalMaterial({
+                    map: wallTex,
+                    side: THREE.DoubleSide,
+                });
+
+                let wallGeometry = new THREE.PlaneGeometry(200, 200, 10, 10);
+                const wall1 = new THREE.Mesh(wallGeometry, wallMaterial);
+                wall1.position.set(0, 0, -100);
+                wall1.castShadow = false;
+                wall1.receiveShadow = true;
+                scene.add(wall1);
+
+                const wall2 = new THREE.Mesh(wallGeometry, wallMaterial);
+                wall2.position.set(-100, 0, 0);
+                wall2.rotateY(-Math.PI / 2);
+                wall2.castShadow = false;
+                wall2.receiveShadow = true;
+                scene.add(wall2);
+
+                const wall3 = new THREE.Mesh(wallGeometry, wallMaterial);
+                wall3.position.set(100, 0, 0);
+                wall3.rotateY(Math.PI / 2);
+                wall3.castShadow = false;
+                wall3.receiveShadow = true;
+                scene.add(wall3);
+
+                const wall4 = new THREE.Mesh(wallGeometry, wallMaterial);
+                wall4.position.set(0, 0, 100);
+                wall4.rotateY(Math.PI);
+                wall4.castShadow = false;
+                wall4.receiveShadow = true;
+                scene.add(wall4);
+
+                const wall5 = new THREE.Mesh(wallGeometry, wallMaterial);
+                wall5.position.set(0, 100, 0);
+                wall5.rotateX(Math.PI / 2);
+                wall5.castShadow = false;
+                wall5.receiveShadow = true;
+                scene.add(wall5);
+
+                const controls = new THREE.PointerLockControls(
+                    camera,
+                    document.body
+                );
+
+                window.addEventListener('resize', function () {
+                    camera.aspect = window.innerWidth / window.innerHeight;
+                    camera.updateProjectionMatrix();
+
+                    renderer.setSize(window.innerWidth, window.innerHeight);
+                });
+
                 $('canvas').addClass('blur');
-                paused = true;
-            });
-            controls.addEventListener('lock', function () {
-                $('#pause-menu').addClass('hidden');
-                $('canvas').removeClass('blur');
-                if (!start) {
-                    start = true;
-                }
 
-                paused = false;
-            });
+                $(document).click(function (e) {
+                    let target = e.target;
 
-            controls.setSensitivity(0.5);
+                    if (target.id == 'resume') {
+                        controls.lock();
+                    } else if (target.id == 'sensitivityInput') {
+                        controls.setSensitivity($('#sensitivityInput').val());
+                    } else if (target.id == 'play-again') {
+                        gameover = false;
+                        time = gameTimeLimit;
+                        score = 0;
+                        clicks = 0;
+                        hits = 0;
+                        paused = false;
+                        animate();
+                        controls.lock();
 
-            spawnSphere();
-            spawnSphere();
-            spawnSphere();
+                        $('#gameover-menu').addClass('hidden');
 
-            var clock = new THREE.Clock();
-            var speed = 2; //units a second
-            var delta = 0;
+                        spawnSphere();
+                        spawnSphere();
+                        spawnSphere();
+                    } else if (target.id == 'start-button') {
+                        audioContext = new (window.AudioContext ||
+                            window.webkitAudioContext)();
+                        audio = document.getElementsByTagName('audio')[0];
+                        audio.volume = 0.25;
+                        source = audioContext.createMediaElementSource(audio);
 
-            function animate() {
-                if (time >= 0) {
-                    requestAnimationFrame(animate);
+                        filter = audioContext.createBiquadFilter();
+                        source.connect(filter);
+                        filter.connect(audioContext.destination);
 
-                    raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+                        filter.type = 'lowpass';
+                        filter.frequency.value = 24000;
 
-                    var intersects = raycaster.intersectObject(scene, true);
+                        audio.play();
 
-                    if (intersects.length > 0) {
-                        selectedObject = intersects[0].object;
-                    } else {
-                        selectedObject = null;
+                        $('#start-button').addClass('hidden');
+                        controls.lock();
+                    } else if (target == document.body) {
+                        clicks++;
+                        if (!gameover && !paused) {
+                            if (
+                                selectedObject != null &&
+                                selectedObject.name == 'target'
+                            ) {
+                                let bonk = new Audio('bonk.mp3');
+                                bonk.play();
+                                scene.remove(selectedObject);
+                                spawnSphere();
+                                hits++;
+
+                                score += 100;
+                            } else {
+                                let miss = new Audio('miss.mp3');
+                                miss.play();
+                                score -= 50;
+                            }
+
+                            if (!paused) {
+                                if (!locked) {
+                                    controls.lock();
+                                }
+                                score = Math.max(score, 0);
+                                $('#score').html('<span>PTS </span>' + score);
+
+                                let accuracy = parseInt((hits / clicks) * 100);
+                                if (isNaN(accuracy)) {
+                                    accuracy = 0;
+                                }
+                                $('#accuracy').html(
+                                    accuracy + '<span> %</span>'
+                                );
+                            }
+                        }
                     }
+                });
 
+                $(document).mousemove(function (e) {
+                    let target = e.target;
+
+                    if (target.id == 'sensitivityInput') {
+                        controls.setSensitivity($('#sensitivityInput').val());
+                    }
+                });
+
+                controls.addEventListener('unlock', function () {
+                    locked = false;
+                    if (time > 0) {
+                        $('#pause-menu').removeClass('hidden');
+                    }
+                    $('canvas').addClass('blur');
+                    paused = true;
+                    filter.frequency.value = 250;
+                });
+
+                controls.addEventListener('lock', function () {
+                    locked = true;
+                    $('#pause-menu').addClass('hidden');
+                    $('canvas').removeClass('blur');
+                    if (!start) {
+                        start = true;
+                    }
+                    filter.frequency.value = 24000;
+
+                    paused = false;
+                });
+
+                controls.setSensitivity(0.5);
+
+                spawnSphere();
+                spawnSphere();
+                spawnSphere();
+
+                let clock = new THREE.Clock();
+                let speed = 2; //units a second
+                let delta = 0;
+
+                function animate() {
+                    requestAnimationFrame(animate);
                     delta = clock.getDelta();
 
-                    if (start && !paused) {
-                        time -= delta;
+                    if (time >= 0) {
+                        raycaster.setFromCamera(
+                            new THREE.Vector2(0, 0),
+                            camera
+                        );
+
+                        var intersects = raycaster.intersectObject(scene, true);
+
+                        if (intersects.length > 0) {
+                            selectedObject = intersects[0].object;
+                        } else {
+                            selectedObject = null;
+                        }
+
+                        if (start && !paused) {
+                            time -= delta;
+                        }
+
+                        $('#timer').html(NumToTime(time));
                     }
+                    if (time <= 0) {
+                        gameover = true;
+                        clearTargets();
+                        $('#gameover-menu').removeClass('hidden');
+                        controls.unlock();
 
-                    $('#timer').html(NumToTime(time));
-
+                        $('#timer').html(NumToTime(0));
+                        $('#menu-score').html('Score: ' + score);
+                        $('#menu-accuracy').html(
+                            'Accuracy: ' +
+                                parseFloat((hits / clicks) * 100).toFixed(2) +
+                                '%'
+                        );
+                    }
                     renderer.render(scene, camera);
                 }
-                if (time <= 0) {
-                    $('#gameover-menu').removeClass('hidden');
-                    controls.unlock();
 
-                    $('#timer').html(NumToTime(0));
-                    $('#menu-score').html('Score: ' + score);
-                    $('#menu-accuracy').html(
-                        'Accuracy: ' +
-                            parseFloat((hits / clicks) * 100).toFixed(2) +
-                            '%'
+                function clearTargets() {
+                    for (let i = 0; i < targets.length; i++) {
+                        scene.remove(targets[i]);
+                    }
+                }
+                function spawnSphere() {
+                    let geometry = new THREE.SphereGeometry(1, 36, 36);
+                    let material = new THREE.MeshPhysicalMaterial({
+                        color: 0x49ef4,
+                        emissive: 0x0,
+                        roughness: 0.5,
+                        metalness: 0.25,
+                    });
+                    let sphere = new THREE.Mesh(geometry, material);
+                    sphere.name = 'target';
+
+                    sphere.castShadow = true;
+                    sphere.receiveShadow = false;
+
+                    sphere.position.set(
+                        getRandomInt(-7.5, 7.5),
+                        getRandomInt(20, 30),
+                        getRandomInt(-5, -15)
                     );
-                }
-            }
 
-            function spawnSphere() {
-                let geometry = new THREE.SphereGeometry(1, 36, 36);
-                let material = new THREE.MeshLambertMaterial({
-                    color: 0x4dc3f1,
-                });
-                let sphere = new THREE.Mesh(geometry, material);
-
-                scene.add(sphere);
-                sphere.position.set(
-                    getRandomInt(-7.5, 7.5),
-                    getRandomInt(20, 30),
-                    getRandomInt(-5, -15)
-                );
-            }
-            function getRandomInt(min, max) {
-                min = Math.ceil(min);
-                max = Math.floor(max);
-                return Math.floor(Math.random() * (max - min) + min); //The maximum is exclusive and the minimum is inclusive
-            }
-            function NumToTime(num) {
-                var minutes = Math.floor(num / 60);
-                var seconds = Math.floor(num % 60);
-                if ((seconds + '').length < 2) {
-                    seconds = '0' + seconds;
+                    scene.add(sphere);
+                    targets.push(sphere);
                 }
-                return minutes + ':' + seconds;
-            }
-            animate();
+                function getRandomInt(min, max) {
+                    min = Math.ceil(min);
+                    max = Math.floor(max);
+                    return Math.floor(Math.random() * (max - min) + min); //The maximum is exclusive and the minimum is inclusive
+                }
+                function NumToTime(num) {
+                    var minutes = Math.floor(num / 60);
+                    var seconds = Math.floor(num % 60);
+                    if ((seconds + '').length < 2) {
+                        seconds = '0' + seconds;
+                    }
+                    return minutes + ':' + seconds;
+                }
+
+                animate();
+            });
         </script>
 
         <div id="overlay-container">
-            <div id="game-info" class="px-5 mx-5 mt-3">
-                <span></span>
-                <h1 id="timer" class="d-inline m-auto text-center">0:00</h1>
-                <h3 id="score" class="d-inline text-right">0</h3>
+            <audio src="soundtrack.mp3"></audio>
+            <div id="game-info" class="px-5 mx-auto mt-5">
+                <h2 id="score" class="text-center"><span>PTS </span>0</h2>
+                <h1 id="timer" class="text-center">0:00</h1>
+                <h2 id="accuracy" class="text-center">0 <span> %</span></h2>
             </div>
-            <div id="pause-menu" class="">
+            <button class="btn btn-primary" id="start-button">Start</button>
+            <div id="pause-menu" class="hidden">
                 <label
                     >Sensitivity:
                     <input
@@ -271,7 +418,7 @@
                         step="0.01"
                 /></label>
                 <button id="resume" class="d-inline btn btn-primary">
-                    Resume
+                    Play
                 </button>
             </div>
 
