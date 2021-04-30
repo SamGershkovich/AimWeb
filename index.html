@@ -271,54 +271,58 @@
                 controls.setSensitivity(0.5);
 
                 let clock = new THREE.Clock();
-                let speed = 2; //units a second
+                let interval = 1 / 60; //framerate
 
                 function animate() {
                     requestAnimationFrame(animate);
-                    deltaTime = clock.getDelta();
+                    deltaTime += clock.getDelta();
 
-                    if (timer >= 0) {
-                        if (!paused) {
-                            gameTime += deltaTime;
+                    if (deltaTime > interval) {
+                        if (timer >= 0) {
+                            if (!paused) {
+                                gameTime += deltaTime;
 
-                            animateTargets();
+                                animateTargets();
 
-                            raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+                                raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
 
-                            var intersects = raycaster.intersectObject(scene, true);
+                                var intersects = raycaster.intersectObject(scene, true);
 
-                            if (intersects.length > 0) {
-                                let temp = intersects[0].object;
-                                if (selectedObject != null && temp != selectedObject && selectedObject.name == 'target') {
-                                    hoverOffTarget();
+                                if (intersects.length > 0) {
+                                    let temp = intersects[0].object;
+                                    if (selectedObject != null && temp != selectedObject && selectedObject.name == 'target') {
+                                        hoverOffTarget();
+                                    }
+                                    selectedObject = intersects[0].object;
+                                    if (selectedObject.name == 'target') {
+                                        hoverTarget();
+                                    }
+                                } else {
+                                    selectedObject = null;
                                 }
-                                selectedObject = intersects[0].object;
-                                if (selectedObject.name == 'target') {
-                                    hoverTarget();
+
+                                if (start && !paused) {
+                                    timer -= deltaTime;
                                 }
-                            } else {
-                                selectedObject = null;
+
+                                updateUI();
                             }
+                        } else if (timer <= 0) {
+                            if (!gameover) {
+                                gameover = true;
+                                clearTargets();
+                                $('#gameover-menu').removeClass('hidden');
+                                controls.unlock();
 
-                            if (start && !paused) {
-                                timer -= deltaTime;
+                                $('#timer').html(NumToTime(0));
+                                $('#menu-score').html('Score: ' + score);
+                                $('#menu-accuracy').html('Accuracy: ' + accuracy + '%');
                             }
-
-                            updateUI();
                         }
-                    } else if (timer <= 0) {
-                        if (!gameover) {
-                            gameover = true;
-                            clearTargets();
-                            $('#gameover-menu').removeClass('hidden');
-                            controls.unlock();
-
-                            $('#timer').html(NumToTime(0));
-                            $('#menu-score').html('Score: ' + score);
-                            $('#menu-accuracy').html('Accuracy: ' + accuracy + '%');
-                        }
+                        renderer.render(scene, camera);
                     }
-                    renderer.render(scene, camera);
+
+                    deltaTime = deltaTime % interval;
                 }
 
                 function updateUI() {
@@ -477,7 +481,17 @@
                 }
 
                 function spawnSphere(position) {
-                    let geometry = new THREE.SphereGeometry(1, 36, 36);
+                    let radius;
+                    switch (gamemode) {
+                        case 'target-track':
+                            radius = 1.5;
+                            break;
+                        case 'grid-shot':
+                            radius = 1;
+                            break;
+                    }
+
+                    let geometry = new THREE.SphereGeometry(radius, 36, 36);
                     let material = new THREE.MeshPhysicalMaterial({
                         color: 0x0069d9,
                         emissive: 0x0,
@@ -490,9 +504,9 @@
                     switch (gamemode) {
                         case 'target-track':
                             sphere.userData.defaultMat = 0x0069d9;
-                            sphere.userData.radius = 1;
+                            sphere.userData.radius = radius;
                             sphere.userData.targetPos = null;
-                            sphere.userData.speed = 0.1;
+                            sphere.userData.speed = 0.125;
                             break;
                     }
 
